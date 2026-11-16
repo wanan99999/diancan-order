@@ -238,5 +238,7 @@
   }
 
   window.compressImage = compressImage;
-  window.backend = (cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY) ? new CloudBackend() : new LocalBackend();
+  // ?local=1 强制本地演示（只用本浏览器存储，便于测试，不碰线上数据）
+  const forceLocal = new URLSearchParams(location.search).get('local') === '1';
+  window.backend = (!forceLocal && cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY) ? new CloudBackend() : new LocalBackend();
 })();

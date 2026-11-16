@@ -64,6 +64,84 @@
         });
     });
   }
+  // 1:1 裁剪：拖动平移，滑块/滚轮/双指缩放；返回 JPEG Blob，取消返回 null
+  function cropImage(file, { outSize = 800, round = false, title = '裁剪图片' } = {}) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('无法读取该图片')); };
+      img.onload = () => {
+        const m = document.createElement('div');
+        m.className = 'crop-mask';
+        m.innerHTML = `
+          <div class="crop-top"><button data-c="cancel">取消</button><b>${esc(title)}</b><button class="crop-ok" data-c="ok">完成</button></div>
+          <div class="crop-stage"><div class="crop-box ${round ? 'round' : ''}"><div class="grid"></div></div></div>
+          <div class="crop-bottom">
+            <div class="crop-zoom"><span>－</span><input type="range" min="1" max="4" step="0.01" value="1" aria-label="缩放"><span>＋</span></div>
+            <div class="crop-tip">拖动调整位置，双指或滑块缩放</div>
+          </div>`;
+        document.body.appendChild(m);
+        document.body.classList.add('no-scroll');
+        const box = m.querySelector('.crop-box'), slider = m.querySelector('input');
+        box.prepend(img);
+        const W = img.naturalWidth, H = img.naturalHeight, S = box.clientWidth;
+        const minScale = Math.max(S / W, S / H);
+        let scale = minScale, tx = (S - W * scale) / 2, ty = (S - H * scale) / 2;
+        const clamp = () => {
+          tx = Math.min(0, Math.max(S - W * scale, tx));
+          ty = Math.min(0, Math.max(S - H * scale, ty));
+        };
+        const draw = () => { clamp(); img.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; slider.value = scale / minScale; };
+        const zoomTo = (ns, px = S / 2, py = S / 2) => {
+          ns = Math.min(minScale * 4, Math.max(minScale, ns));
+          tx = px - (px - tx) * ns / scale; ty = py - (py - ty) * ns / scale; scale = ns; draw();
+        };
+        img.style.width = W + 'px'; img.style.height = H + 'px';
+        draw();
+
+        // 拖动 / 双指缩放
+        const pts = new Map(); let last = null;
+        const rel = e => { const r = box.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+        const snapshot = () => {
+          const p = [...pts.values()];
+          if (p.length === 1) return { x: p[0][0], y: p[0][1] };
+          const [a, b] = p;
+          return { x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2, d: Math.hypot(a[0] - b[0], a[1] - b[1]) };
+        };
+        box.addEventListener('pointerdown', e => { box.setPointerCapture(e.pointerId); pts.set(e.pointerId, rel(e)); last = snapshot(); });
+        box.addEventListener('pointermove', e => {
+          if (!pts.has(e.pointerId)) return;
+          pts.set(e.pointerId, rel(e));
+          const cur = snapshot();
+          if (last && cur.d && last.d) zoomTo(scale * cur.d / last.d, cur.x, cur.y);
+          if (last) { tx += cur.x - last.x; ty += cur.y - last.y; draw(); }
+          last = cur;
+        });
+        const up = e => { pts.delete(e.pointerId); last = pts.size ? snapshot() : null; };
+        box.addEventListener('pointerup', up); box.addEventListener('pointercancel', up);
+        box.addEventListener('wheel', e => { e.preventDefault(); const [x, y] = rel(e); zoomTo(scale * (e.deltaY < 0 ? 1.1 : 1 / 1.1), x, y); }, { passive: false });
+        slider.addEventListener('input', () => zoomTo(minScale * Number(slider.value)));
+
+        const done = blob => {
+          m.remove(); URL.revokeObjectURL(url);
+          if (!document.querySelector('.modal-mask')) document.body.classList.remove('no-scroll');
+          resolve(blob);
+        };
+        m.querySelector('[data-c=cancel]').onclick = () => done(null);
+        m.querySelector('[data-c=ok]').onclick = () => {
+          const c = document.createElement('canvas');
+          const out = Math.min(outSize, Math.round(S / scale)) || outSize; // 不放大到超过原图分辨率
+          c.width = c.height = out;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out, out);
+          ctx.drawImage(img, -tx / scale, -ty / scale, S / scale, S / scale, 0, 0, out, out);
+          c.toBlob(b => b ? done(b) : reject(new Error('图片处理失败')), 'image/jpeg', 0.86);
+        };
+      };
+      img.src = url;
+    });
+  }
+
   function pickImage() {
     return new Promise(res => {
       const i = document.createElement('input');
@@ -216,7 +294,9 @@
       el.querySelector('[data-pick]').onclick = async () => {
         const f = await pickImage(); if (!f) return;
         try {
-          blob = await window.compressImage(f);
+          const cropped = await cropImage(f, { outSize: 800, title: '裁剪菜品图片' });
+          if (!cropped) return;
+          blob = cropped;
           el.querySelector('.pick-inner').outerHTML = `<img class="pick-inner" src="${URL.createObjectURL(blob)}">`;
         } catch (e) { toast(e.message); }
       };
@@ -381,7 +461,10 @@
 
   async function changeAvatar() {
     const f = await pickImage(); if (!f) return;
-    try { const b = await window.compressImage(f, 400); await api.updateProfile({ avatarBlob: b }); viewMe(); toast('头像已更新'); }
+    try {
+      const b = await cropImage(f, { outSize: 400, round: true, title: '裁剪头像' });
+      if (!b) return;
+      await api.updateProfile({ avatarBlob: b }); viewMe(); toast('头像已更新'); }
     catch (e) { toast(e.message); }
   }
   function renameDialog() {
