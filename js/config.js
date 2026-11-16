@@ -15,5 +15,7 @@ window.APP_CONFIG = {
   BRAND_BG: '1',
   // 购物车样式：float（右下角两个悬浮按钮）| bar（底部结算栏）
   // 可用网址参数 ?cart=bar 临时预览
-  CART_STYLE: 'float',
+  CART_STYLE: 'bar',
+  // 界面版本：1=两列卡片（旧版） 2=单列列表（当前），可用 ?ui=1 查看旧版
+  UI: '2',
 };
