@@ -269,6 +269,10 @@
       </div>
     </div>`;
 
+  // 分段顺序：招牌推荐（与其他分类重复出现）→ 各分类
+  const sectionKeys = () => window.CATEGORIES.map(c => c.key).filter(k => k !== 'all');
+  const sectionDishes = k => S.dishes.filter(d => k === 'featured' ? d.featured : d.category === k);
+
   function renderList2() {
     const box = document.getElementById('dish-list'); if (!box) return;
     const q = (S.q || '').trim().toLowerCase();
@@ -277,24 +281,95 @@
       const hit = S.dishes.filter(d => (d.name + ' ' + d.description).toLowerCase().includes(q));
       html = `<div class="sec-title">搜索“${esc(S.q.trim())}” <span class="muted">${hit.length} 道</span></div>` +
         (hit.length ? hit.map(rowHtml).join('') : '<div class="empty">没有找到相关菜品</div>');
-    } else if (S.cat === 'all') {
-      html = window.CATEGORIES.filter(c => !['all', 'featured'].includes(c.key)).map(c => {
-        const ds = S.dishes.filter(d => d.category === c.key);
-        return ds.length ? `<div class="sec-title">${esc(c.name)}</div>${ds.map(rowHtml).join('')}` : '';
-      }).join('');
     } else {
-      const ds = S.dishes.filter(d => inCat(d, S.cat));
-      html = `<div class="sec-title">${esc(catName(S.cat))} <span class="muted">${ds.length} 道</span></div>` +
-        (ds.length ? ds.map(rowHtml).join('') : (isAdmin() ? '' : '<div class="empty">该分类暂无菜品</div>'));
+      html = sectionKeys().map(k => {
+        const ds = sectionDishes(k);
+        if (!ds.length && !isAdmin()) return '';
+        return `<section class="sec" id="sec-${k}" data-sec="${k}">
+          <div class="sec-title">${esc(catName(k))} <span class="muted">${ds.length} 道</span></div>
+          ${ds.length ? ds.map(rowHtml).join('') : '<div class="empty small">暂无菜品</div>'}</section>`;
+      }).join('');
+      if (isAdmin()) html += `<button class="row add-row" data-act="new"><span>+</span> 新增菜品</button>`;
+      html += '<div id="list-spacer"></div>';
     }
-    if (isAdmin() && !q) html += `<button class="row add-row" data-act="new"><span>+</span> 新增菜品</button>`;
     box.innerHTML = html;
+    document.querySelector('.cats')?.classList.toggle('searching', !!q);
     refreshCartUI();
+    fitSpacer();
+    syncActiveCat();
+  }
+
+  // 让最后一个分段也能滚到顶部
+  function fitSpacer() {
+    const sp = document.getElementById('list-spacer'); if (!sp) return;
+    const secs = document.querySelectorAll('.sec'); const last = secs[secs.length - 1];
+    if (!last) return;
+    sp.style.height = '0px';
+    const avail = window.innerHeight - stickyOffset() - (document.getElementById('tabbar')?.offsetHeight || 0);
+    sp.style.height = Math.max(0, avail - (sp.offsetTop - last.offsetTop)) + 'px';
+  }
+  const stickyOffset = () => (document.querySelector('.search')?.offsetHeight || 0);
+
+  // 高亮某个分类（不重绘列表）
+  function setActiveCat(key) {
+    if (S.cat === key && document.querySelector(`.cat.active[data-cat="${key}"]`)) return;
+    S.cat = key;
+    const btns = [...document.querySelectorAll('.cats .cat')];
+    const ai = btns.findIndex(b => b.dataset.cat === key);
+    btns.forEach((b, i) => {
+      b.classList.toggle('active', i === ai);
+      b.classList.toggle('pre', i === ai - 1);
+      b.classList.toggle('post', i === ai + 1);
+    });
+    document.querySelector('.cat-fill')?.classList.toggle('post', ai === btns.length - 1);
+    // 分类栏自身较长时，保证选中项可见
+    const bar = document.querySelector('.cats'), b = btns[ai];
+    if (bar && b && bar.scrollHeight > bar.clientHeight) {
+      if (b.offsetTop < bar.scrollTop + 10 || b.offsetTop + b.offsetHeight > bar.scrollTop + bar.clientHeight - 10)
+        bar.scrollTo({ top: b.offsetTop - bar.clientHeight / 2 + b.offsetHeight / 2, behavior: 'smooth' });
+    }
+  }
+
+  // 根据滚动位置决定高亮：哪个分段的标题已经到达搜索栏下方，就高亮哪个；还没滚到任何分段时高亮"全部"
+  let spyLock = 0;
+  function syncActiveCat() {
+    if (ui !== '2' || currentRoute().name !== 'menu' || (S.q || '').trim()) return;
+    if (Date.now() < spyLock) return;
+    const line = stickyOffset() + 12;
+    let cur = 'all';
+    const secs = document.querySelectorAll('.sec');
+    const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+    const menuTop = document.querySelector('.menu')?.offsetTop || 0;
+    if (window.scrollY > menuTop + 4) {
+      for (const s of secs) { if (s.getBoundingClientRect().top <= line) cur = s.dataset.sec; }
+    }
+    if (atBottom && window.scrollY > 0 && secs.length) {
+      // 已滚到底：取视口内最靠上的分段
+      for (const s of secs) { const r = s.getBoundingClientRect(); if (r.bottom > line) { cur = s.dataset.sec; break; } }
+    }
+    setActiveCat(cur);
+  }
+  let spyRaf = 0;
+  window.addEventListener('scroll', () => { if (!spyRaf) spyRaf = requestAnimationFrame(() => { spyRaf = 0; syncActiveCat(); }); }, { passive: true });
+  window.addEventListener('resize', () => { if (ui === '2' && currentRoute().name === 'menu') fitSpacer(); });
+
+  // 点分类：滚动到对应分段
+  function jumpToCat(key) {
+    if ((S.q || '').trim()) { S.q = ''; const qi = document.getElementById('q'); if (qi) qi.value = ''; renderList2(); }
+    setActiveCat(key);
+    spyLock = Date.now() + 700;
+    let top;
+    if (key === 'all') top = document.querySelector('.menu').offsetTop;
+    else {
+      const el = document.getElementById('sec-' + key);
+      if (!el) return;
+      top = el.getBoundingClientRect().top + window.scrollY - stickyOffset() + 1;
+    }
+    window.scrollTo({ top, behavior: 'smooth' });
   }
 
   function viewMenu2() {
     const cats = window.CATEGORIES;
-    const ai = cats.findIndex(c => c.key === S.cat);
     $app.innerHTML = `
       <header class="brand bg-${brandBg}">
         <h1 class="brand-name">家家点餐咯</h1>
@@ -302,11 +377,11 @@
         ${api.mode === 'local' ? '<span class="mode-tag">演示模式</span>' : ''}
       </header>
       <div class="menu">
-        <aside class="cats">${cats.map((c, i) => `
-          <button class="cat ${i === ai ? 'active' : ''} ${i === ai - 1 ? 'pre' : ''} ${i === ai + 1 ? 'post' : ''}" data-cat="${c.key}">
+        <aside class="cats">${cats.map(c => `
+          <button class="cat" data-cat="${c.key}">
             ${catIcon(c.key)}<span>${esc(c.key === 'featured' ? '招牌推荐' : c.name)}</span>
             ${c.key === 'featured' ? '<em class="hot-pill">HOT</em>' : ''}<i class="cat-badge" hidden></i></button>`).join('')}
-          <div class="cat-fill ${ai === cats.length - 1 ? 'post' : ''}"></div>
+          <div class="cat-fill"></div>
         </aside>
         <main class="dishes">
           <label class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
@@ -315,7 +390,8 @@
         </main>
       </div>`;
     const qi = document.getElementById('q');
-    qi.addEventListener('input', () => { S.q = qi.value; renderList2(); });
+    qi.addEventListener('input', () => { S.q = qi.value; renderList2(); if (!qi.value.trim()) syncActiveCat(); });
+    S.cat = '';
     renderList2();
   }
 
@@ -636,6 +712,7 @@
   document.addEventListener('click', async e => {
     const cat = e.target.closest('.cat[data-cat]');
     if (cat) {
+      if (ui === '2') { jumpToCat(cat.dataset.cat); return; }
       S.cat = cat.dataset.cat; S.q = ''; viewMenu();
       const top = document.querySelector('.menu').offsetTop;
       if (window.scrollY > top) window.scrollTo(0, top);
