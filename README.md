@@ -2,8 +2,8 @@
 
 纯静态网站（GitHub Pages），数据用 Supabase（免费）。
 
-- 线上地址：https://tranchiclever417693-lab.github.io/diancan-order/
-- 标题字体预览：https://tranchiclever417693-lab.github.io/diancan-order/fonts.html
+- 线上地址：https://wanan99999.github.io/diancan-order/
+- 标题字体预览：https://wanan99999.github.io/diancan-order/fonts.html
 
 ## 两种运行模式
 
