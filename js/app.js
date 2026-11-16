@@ -7,7 +7,10 @@
   const params = new URLSearchParams(location.search);
   const FONTS = ['kuaile', 'mashanzheng', 'zhimangxing', 'huangyou', 'longcang'];
   const font = FONTS.includes(params.get('font')) ? params.get('font') : cfg.BRAND_FONT;
-  const cartStyle = ['float', 'bar'].includes(params.get('cart')) ? params.get('cart') : cfg.CART_STYLE;
+  // 界面版本：1=两列卡片（原版） 2=单列列表（新版），可用 ?ui=2 预览
+  const ui = ['1', '2'].includes(params.get('ui')) ? params.get('ui') : String(cfg.UI || '1');
+  document.documentElement.dataset.ui = ui;
+  const cartStyle = ['float', 'bar'].includes(params.get('cart')) ? params.get('cart') : (ui === '2' ? 'bar' : cfg.CART_STYLE);
   document.documentElement.dataset.font = font;
   document.documentElement.dataset.cart = cartStyle;
   const brandBg = /^[0-7]$/.test(params.get('bg') || '') ? params.get('bg') : String(cfg.BRAND_BG || '0');
@@ -229,8 +232,96 @@
     document.body.classList.toggle('no-scroll', S.cartOpen);
   }
 
+  // ---------- 页面：点餐（新版 ui=2：单列列表） ----------
+  const ICON = {
+    all: '<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
+    featured: '<path d="M12 3c1 3 5 5.5 5 10a5 5 0 0 1-10 0c0-2 .8-3.6 2-4.6.2 1.8 1 2.8 2 3.1-.3-3 .2-5.6 1-8.5Z"/>',
+    cold: '<ellipse cx="12" cy="15" rx="9" ry="4"/><circle cx="9" cy="12.5" r="2.2"/><circle cx="14.5" cy="11.5" r="2.2"/>',
+    hot: '<path d="M3 12h16a8 6 0 0 1-16 0Z"/><path d="M19 12l3-2.5"/><path d="M8 8.5c0-1.2 1-1.6 1-3.2M12.5 8.5c0-1.2 1-1.6 1-3.2"/>',
+    veg: '<path d="M5 19c0-8 5-14 15-14 0 10-6 15-14 15Z"/><path d="M5 19l8-8"/>',
+    soup: '<path d="M3 11h18a9 8 0 0 1-18 0Z"/><path d="M8 21h8"/><path d="M15 11l5-7"/>',
+    staple: '<path d="M4 12h16a8 7 0 0 1-16 0Z"/><path d="M6.5 12a5.5 4 0 0 1 11 0"/><path d="M14 3l5 6.5M17.5 2l4.5 6"/>',
+    snack: '<path d="M6 12h12l-2 8H8Z"/><path d="M5 12a7 6 0 0 1 14 0"/><circle cx="12" cy="4.5" r="1.3"/>',
+    drink: '<path d="M6 8h12l-1.5 13h-9Z"/><path d="M5 8h14"/><path d="M13 8l2-6h3"/>',
+  };
+  const catIcon = k => `<svg class="cat-ico" viewBox="0 0 24 24">${ICON[k] || ICON.all}</svg>`;
+  // "新品"：首批初始菜品之后添加、且 14 天内的菜
+  function isNewDish(d) {
+    if (!d.created_at) return false;
+    const t = Date.parse(d.created_at);
+    const first = Math.min(...S.dishes.map(x => Date.parse(x.created_at) || Infinity));
+    return t - first > 86400e3 && Date.now() - t < 14 * 86400e3;
+  }
+  const tagsHtml = d => [
+    d.featured ? '<i class="tg tg-hot">招牌</i>' : '',
+    isNewDish(d) ? '<i class="tg tg-new">新品</i>' : '',
+  ].join('');
+  const rowHtml = d => `
+    <div class="row">
+      <div class="row-img">${dishImg(d)}
+        ${isAdmin() ? `<button class="edit-btn" data-act="edit" data-id="${d.id}" aria-label="编辑">✎</button>` : ''}</div>
+      <div class="row-body">
+        <div class="row-name">${esc(d.name)}${spicy(d.spicy)}</div>
+        <div class="row-tags">${tagsHtml(d)}</div>
+        <div class="row-desc">${esc(d.description)}</div>
+        <div class="row-foot"><span class="price2"><small>¥</small>${money(d.price)}</span>
+          <div class="ctl" data-for="${d.id}">${qtyCtl(d.id)}</div></div>
+      </div>
+    </div>`;
+
+  function renderList2() {
+    const box = document.getElementById('dish-list'); if (!box) return;
+    const q = (S.q || '').trim().toLowerCase();
+    let html = '';
+    if (q) {
+      const hit = S.dishes.filter(d => (d.name + ' ' + d.description).toLowerCase().includes(q));
+      html = `<div class="sec-title">搜索“${esc(S.q.trim())}” <span class="muted">${hit.length} 道</span></div>` +
+        (hit.length ? hit.map(rowHtml).join('') : '<div class="empty">没有找到相关菜品</div>');
+    } else if (S.cat === 'all') {
+      html = window.CATEGORIES.filter(c => !['all', 'featured'].includes(c.key)).map(c => {
+        const ds = S.dishes.filter(d => d.category === c.key);
+        return ds.length ? `<div class="sec-title">${esc(c.name)}</div>${ds.map(rowHtml).join('')}` : '';
+      }).join('');
+    } else {
+      const ds = S.dishes.filter(d => inCat(d, S.cat));
+      html = `<div class="sec-title">${esc(catName(S.cat))} <span class="muted">${ds.length} 道</span></div>` +
+        (ds.length ? ds.map(rowHtml).join('') : (isAdmin() ? '' : '<div class="empty">该分类暂无菜品</div>'));
+    }
+    if (isAdmin() && !q) html += `<button class="row add-row" data-act="new"><span>+</span> 新增菜品</button>`;
+    box.innerHTML = html;
+    refreshCartUI();
+  }
+
+  function viewMenu2() {
+    const cats = window.CATEGORIES;
+    const ai = cats.findIndex(c => c.key === S.cat);
+    $app.innerHTML = `
+      <header class="brand bg-${brandBg}">
+        <h1 class="brand-name">家家点餐咯</h1>
+        <p class="brand-slogan">吃好喝好每天都好~</p>
+        ${api.mode === 'local' ? '<span class="mode-tag">演示模式</span>' : ''}
+      </header>
+      <div class="menu">
+        <aside class="cats">${cats.map((c, i) => `
+          <button class="cat ${i === ai ? 'active' : ''} ${i === ai - 1 ? 'pre' : ''} ${i === ai + 1 ? 'post' : ''}" data-cat="${c.key}">
+            ${catIcon(c.key)}<span>${esc(c.key === 'featured' ? '招牌推荐' : c.name)}</span>
+            ${c.key === 'featured' ? '<em class="hot-pill">HOT</em>' : ''}<i class="cat-badge" hidden></i></button>`).join('')}
+          <div class="cat-fill ${ai === cats.length - 1 ? 'post' : ''}"></div>
+        </aside>
+        <main class="dishes">
+          <label class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+            <input id="q" type="search" placeholder="今天想吃点啥~" value="${esc(S.q || '')}" autocomplete="off"></label>
+          <div id="dish-list"></div>
+        </main>
+      </div>`;
+    const qi = document.getElementById('q');
+    qi.addEventListener('input', () => { S.q = qi.value; renderList2(); });
+    renderList2();
+  }
+
   // ---------- 页面：点餐 ----------
   function viewMenu() {
+    if (ui === '2') return viewMenu2();
     const cats = window.CATEGORIES;
     const list = S.dishes.filter(d => inCat(d, S.cat));
     $app.innerHTML = `
@@ -545,7 +636,7 @@
   document.addEventListener('click', async e => {
     const cat = e.target.closest('.cat[data-cat]');
     if (cat) {
-      S.cat = cat.dataset.cat; viewMenu();
+      S.cat = cat.dataset.cat; S.q = ''; viewMenu();
       const top = document.querySelector('.menu').offsetTop;
       if (window.scrollY > top) window.scrollTo(0, top);
       return;

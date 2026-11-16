@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>界面对比</title>
+  <style>
+    body { margin: 0; padding: 16px; background: #ebe4dc; color: #2b2420; font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    h2 { margin: 0 0 4px; font-size: 18px; }
+    .tip { color: #8d837b; font-size: 13px; margin: 0 0 16px; }
+    .wrap { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; }
+    .col { text-align: center; }
+    .col b { display: block; font-size: 15px; margin-bottom: 2px; }
+    .col small { display: block; color: #8d837b; margin-bottom: 8px; }
+    .phone { width: 375px; height: 760px; border: 10px solid #26201c; border-radius: 36px; overflow: hidden; background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
+    .phone iframe { width: 100%; height: 100%; border: 0; display: block; }
+    .col a { display: inline-block; margin-top: 10px; color: #c8322b; font-weight: 600; text-decoration: none; }
+    @media (max-width: 820px) {
+      body { padding: 12px; }
+      .phone { width: min(375px, calc(100vw - 24px)); height: 640px; border-width: 6px; border-radius: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <h2>点餐页 · 原版 vs 新版</h2>
+  <p class="tip">两边都是真实菜单，可以直接点、滑、加购物车体验（只浏览，不会产生订单）。在手机上看建议直接点下方链接全屏打开。</p>
+  <div class="wrap">
+    <div class="col">
+      <b>原版</b><small>两列卡片 · 右下角悬浮按钮</small>
+      <div class="phone"><iframe src="index.html?ui=1#/menu" title="原版"></iframe></div>
+      <a href="index.html?ui=1#/menu">全屏打开原版 ›</a>
+    </div>
+    <div class="col">
+      <b>新版</b><small>单列列表 · 分类图标 · 标签 · 搜索 · 底部结算栏</small>
+      <div class="phone"><iframe src="index.html?ui=2#/menu" title="新版"></iframe></div>
+      <a href="index.html?ui=2#/menu">全屏打开新版 ›</a>
+    </div>
+  </div>
+</body>
+</html>
