@@ -618,6 +618,7 @@
         <div class="card list">
           <a href="#/orders">📋 ${u.is_admin ? '全部订单' : '我的订单'}<span class="chev">›</span></a>
           ${u.is_admin ? '<a href="#/menu">🍳 管理菜单（在点餐页点 ✎ 编辑 / 末尾 + 新增）<span class="chev">›</span></a>' : ''}
+          <a href="javascript:void 0" data-act="change-pw">🔒 修改密码<span class="chev">›</span></a>
         </div>
         <button class="btn ghost block" data-act="logout">退出登录</button>
       </div>
@@ -633,6 +634,28 @@
       if (!b) return;
       await api.updateProfile({ avatarBlob: b }); viewMe(); toast('头像已更新'); }
     catch (e) { toast(e.message); }
+  }
+  function changePwDialog() {
+    modal(`<form class="form" autocomplete="on" onsubmit="return false">
+      <h3>修改密码</h3>
+      <input type="text" name="username" autocomplete="username" value="${esc(api.user.username)}" hidden>
+      <label>当前密码<input name="old" type="password" autocomplete="current-password" required></label>
+      <label>新密码<input name="pw1" type="password" autocomplete="new-password" placeholder="至少 6 位" required></label>
+      <label>确认新密码<input name="pw2" type="password" autocomplete="new-password" required></label>
+      <div class="btn-row"><button type="button" class="btn ghost" data-close>取消</button><button type="submit" class="btn primary" data-save>确认修改</button></div>
+    </form>`, (el, close) => {
+      const f = n => el.querySelector(`[name="${n}"]`).value;
+      el.querySelector('[name=old]').focus();
+      el.querySelector('form').addEventListener('submit', async () => {
+        if (!f('old')) return toast('请输入当前密码');
+        if (f('pw1').length < 6) return toast('新密码至少 6 位');
+        if (f('pw1') !== f('pw2')) return toast('两次输入的新密码不一致');
+        const btn = el.querySelector('[data-save]');
+        btn.disabled = true; btn.textContent = '修改中…';
+        try { await api.changePassword(f('old'), f('pw1')); close(); toast('密码已修改，下次请用新密码登录'); }
+        catch (e) { toast(e.message); btn.disabled = false; btn.textContent = '确认修改'; }
+      });
+    });
   }
   function renameDialog() {
     modal(`<div class="form"><h3>修改名称</h3>
@@ -741,6 +764,7 @@
       case 'submit': submitOrder(t); break;
       case 'avatar': changeAvatar(); break;
       case 'rename': renameDialog(); break;
+      case 'change-pw': e.preventDefault(); changePwDialog(); break;
       case 'logout':
         if (await confirmBox('确定退出登录吗？', '退出')) { await api.signOut(); viewMe(); toast('已退出'); }
         break;

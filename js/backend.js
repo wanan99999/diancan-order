@@ -94,6 +94,16 @@
       return (this.user = this._pub(u));
     }
     async signOut() { localStorage.removeItem('dc_session'); this.user = null; }
+    async changePassword(oldPw, newPw) {
+      if (!newPw || newPw.length < 6) throw new Error('新密码至少 6 位');
+      const users = this._get('dc_users', []);
+      const u = users.find(x => x.id === this.user?.id);
+      if (!u) throw new Error('请先登录');
+      if (u.pw !== await sha256(u.username.toLowerCase() + ':' + oldPw)) throw new Error('当前密码不正确');
+      if (oldPw === newPw) throw new Error('新密码不能与当前密码相同');
+      u.pw = await sha256(u.username.toLowerCase() + ':' + newPw);
+      this._set('dc_users', users);
+    }
     async updateProfile({ nickname, avatarBlob }) {
       const users = this._get('dc_users', []);
       const u = users.find(x => x.id === this.user.id);
@@ -179,6 +189,20 @@
       return this._loadProfile(data.user.id);
     }
     async signOut() { await this.sb.auth.signOut(); this.user = null; }
+    async changePassword(oldPw, newPw) {
+      if (!newPw || newPw.length < 6) throw new Error('新密码至少 6 位');
+      if (!this.user) throw new Error('请先登录');
+      // 先用当前密码验证身份
+      const { error: e1 } = await this.sb.auth.signInWithPassword({ email: this._email(this.user.username), password: oldPw });
+      if (e1) throw new Error('当前密码不正确');
+      if (oldPw === newPw) throw new Error('新密码不能与当前密码相同');
+      const { error } = await this.sb.auth.updateUser({ password: newPw });
+      if (error) {
+        if (/same|different/i.test(error.message)) throw new Error('新密码不能与当前密码相同');
+        if (/weak|short|characters/i.test(error.message)) throw new Error('新密码太简单，请换一个');
+        throw new Error('修改失败：' + error.message);
+      }
+    }
     async _upload(folder, blob) {
       const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
       const { error } = await this.sb.storage.from('images').upload(path, blob, { contentType: 'image/jpeg' });
