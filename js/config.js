@@ -3,8 +3,8 @@
 // 填写后 => 云端模式（多设备共享账号、菜单、订单）
 // anon key 是公开密钥，可以放在前端；权限由数据库 RLS 策略保证。
 window.APP_CONFIG = {
-  SUPABASE_URL: '',
-  SUPABASE_ANON_KEY: '',
+  SUPABASE_URL: 'https://dpedzxxbabfwhwvvirzy.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_qRcTimFxnKweNkag_ywjYw_mRXycoTv',
   // 用户名登录会映射成这个域名下的邮箱（Supabase 需要邮箱格式），用户看不到
   EMAIL_DOMAIN: 'diancan.app',
 

@@ -96,6 +96,15 @@ create policy "images upload" on storage.objects for insert to authenticated
     or ((storage.foldername(name))[1] = 'dishes' and public.is_admin())
   ));
 
+-- ========== Data API 权限（不依赖"自动暴露新表"设置） ==========
+grant usage on schema public to anon, authenticated;
+grant select on public.dishes to anon, authenticated;
+grant insert, update, delete on public.dishes to authenticated;
+grant select on public.profiles to authenticated;
+grant select, insert on public.orders to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+grant execute on function public.is_admin() to anon, authenticated;
+
 -- ========== 初始菜品（仅在菜单为空时写入） ==========
 insert into public.dishes (name, description, price, category, spicy, featured, emoji, sort)
 select * from (values

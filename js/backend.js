@@ -209,7 +209,7 @@
         delete row.id;
         res = await this.sb.from('dishes').insert(row).select().single();
       }
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new Error(/PGRST116|row-level security/.test(res.error.code + res.error.message) ? '无权限修改菜品' : res.error.message);
       return res.data;
     }
     async deleteDish(id) {
